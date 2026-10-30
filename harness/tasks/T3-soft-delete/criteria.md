@@ -1,0 +1,4 @@
+- Deleting is a soft delete: the row stays in the database and can be restored.
+- Only the author can delete or restore a post; anyone else gets 403.
+- Deleted posts are not listed and their page returns 404.
+- After restoring, the post is visible again as before.

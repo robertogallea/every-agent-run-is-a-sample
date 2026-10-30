@@ -1,0 +1,3 @@
+- `App\Support\ReadingTime::for()` exists and both controller actions use it; the duplicated code is gone.
+- Numbers count as words.
+- Everything else about reading time stays as it is today (rounding, minimum, existing rules about what is counted). All existing tests must keep passing unchanged.

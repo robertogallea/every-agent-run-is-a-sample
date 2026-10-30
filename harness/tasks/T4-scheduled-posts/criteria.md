@@ -1,0 +1,2 @@
+- Posts with a publication date in the future are scheduled: they must not be listed or viewable until that date.
+- Drafts (no publication date) stay hidden; posts published in the past stay visible.

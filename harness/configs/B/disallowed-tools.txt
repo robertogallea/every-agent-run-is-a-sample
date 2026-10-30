@@ -1,0 +1,7 @@
+WebFetch
+WebSearch
+Bash(composer require:*)
+Bash(composer remove:*)
+Bash(composer update:*)
+Bash(curl:*)
+Bash(wget:*)

@@ -1,0 +1,1 @@
+Authors should be able to delete their own posts, and undo a deletion if they change their mind. Add `DELETE /posts/{post}` (route name `posts.destroy`) and `POST /posts/{post}/restore` (route name `posts.restore`). Deleted posts must disappear from the site.

@@ -1,0 +1,4 @@
+- Registering sends a verification email to the new user.
+- An unverified user who opens the new-post page is sent to a page that asks them to verify their email, and can request the email again.
+- Following the signed link from the email marks the user as verified.
+- Verified users can create posts exactly as before. Guests and browsing are unaffected.

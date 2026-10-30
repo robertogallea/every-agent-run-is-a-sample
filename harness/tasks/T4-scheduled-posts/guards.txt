@@ -1,0 +1,2 @@
+it shows the post once its date has passed
+it keeps published posts visible and drafts hidden

@@ -1,0 +1,3 @@
+it still allows login after four failures
+it does not block other emails
+it resets the counter after a successful login

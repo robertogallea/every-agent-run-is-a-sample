@@ -1,0 +1,1 @@
+New users should verify their email address before they can write posts. When someone registers, send them a verification email. Until they click the link, they can still browse and log in, but they can't create posts. Use Laravel's built-in email verification.

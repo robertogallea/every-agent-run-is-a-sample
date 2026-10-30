@@ -1,0 +1,4 @@
+- After 5 failed login attempts for the same email from the same IP, further attempts are rejected for a while, even with the correct password, with an error on the email field telling the user to try again later.
+- Failed attempts against one email don't block logins for other emails.
+- A successful login resets the counter for that email.
+- Normal logins behave exactly as before.
