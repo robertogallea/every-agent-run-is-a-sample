@@ -3,3 +3,4 @@ app-template/vendor/
 app-template/node_modules/
 app-template/.env
 app-template/database/database.sqlite
+.env.local
