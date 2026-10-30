@@ -6,7 +6,7 @@ use App\Models\User;
 it('unpublishes when the box is unchecked', function () {
     $post = Post::factory()->create(['title' => 'Going away']);
 
-    $this->actingAs($post->user)->put(route('posts.update', $post), ['title' => 'Going away', 'body' => 'b']);
+    $this->actingAs($post->user)->put(route('posts.update', $post), ['title' => 'Going away', 'body' => 'b', 'publish' => '0']);
 
     expect($post->fresh()->published_at)->toBeNull();
     auth()->logout();
