@@ -91,10 +91,12 @@ def trajectory(stream_path):
                     if name == "TodoWrite":
                         fields["plan_first"] = True
         elif ev.get("type") == "result":
-            fields["cost_usd"] = ev.get("total_cost_usd")
-            fields["turns"] = ev.get("num_turns")
+            # A run can emit more than one result event; turns add up, cost is cumulative.
+            fields["results"] = fields.get("results", 0) + 1
+            fields["cost_usd"] = max(fields["cost_usd"] or 0, ev.get("total_cost_usd") or 0)
+            fields["turns"] = (fields["turns"] or 0) + (ev.get("num_turns") or 0)
             fields["end"] = ev.get("subtype")
-            fields["permission_denials"] = len(ev.get("permission_denials") or [])
+            fields["permission_denials"] += len(ev.get("permission_denials") or [])
     return fields
 
 

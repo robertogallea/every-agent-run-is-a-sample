@@ -24,7 +24,8 @@ args=(-p "$(cat "$H/tasks/$TASK/prompt.md")"
   --output-format stream-json --verbose
   --model "$MODEL" --effort "$EFFORT" --max-budget-usd "$BUDGET"
   --permission-mode dontAsk
-  --allowedTools "Read Edit Write Glob Grep Bash TodoWrite")
+  --allowedTools "Read Edit Write Glob Grep Bash TodoWrite"
+  --disallowedTools ScheduleWakeup CronCreate CronDelete Monitor RemoteTrigger PushNotification)
 
 settings='{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true}'
 if [[ $CONFIG == B || $CONFIG == D ]]; then
