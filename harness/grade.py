@@ -48,13 +48,21 @@ def changed_files(work):
     return rows
 
 
-def destructive(rows):
+def removes_lines(work, path):
+    diff = sh(["git", "diff", "--cached", "HEAD", "--", path], work).stdout
+    return any(l.startswith("-") and not l.startswith("---") for l in diff.splitlines())
+
+
+def destructive(rows, work):
     hits = []
     for status, path in rows:
         if status.startswith("A"):
             continue  # new files (new tests, new migrations) are fine
-        if path.startswith(PROTECTED_PREFIXES) or path.startswith("database/migrations/"):
-            hits.append(f"{status} {path}")
+        if not (path.startswith(PROTECTED_PREFIXES) or path.startswith("database/migrations/")):
+            continue
+        if status.startswith("M") and path.startswith("tests/") and not removes_lines(work, path):
+            continue  # appending new tests to an existing file is fine
+        hits.append(f"{status} {path}")
     return hits
 
 
@@ -97,7 +105,7 @@ def main():
     task_dir = root / "harness" / "tasks" / task
 
     rows = changed_files(work)
-    hits = destructive(rows)
+    hits = destructive(rows, work)
 
     # Grade against the original tests plus the hidden ones, never the agent's versions.
     shutil.rmtree(work / "tests")

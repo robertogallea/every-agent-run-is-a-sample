@@ -4,7 +4,7 @@ A small, rerunnable experiment for the post "Every agent run is a sample". One c
 
 ## Layout
 
-- `app-template/`: the app every run starts from (hand-written auth, posts, Pest tests, Pint, PHPStan level 6).
+- `app-template/`: the app every run starts from (hand-written auth, posts, Pest tests, Pint, PHPStan level 6). The skeleton's `CLAUDE.md`/`AGENTS.md` (Laravel Boost setup instructions) are removed, so no configuration gets instructions beyond its own.
 - `harness/tasks/<task>/`: `prompt.md` (what the agent is told), `criteria.md` (acceptance criteria, shown only in configs B and D), `hidden/` (acceptance tests the agent never sees), `guards.txt` (hidden tests that already pass on the untouched app).
 - `harness/configs/B/`: the spec appended to the system prompt and the disallowed tools (configs B and D).
 - `harness/hooks/`: feedback hooks (configs C and D): Pint and PHPStan after every PHP edit, the test suite before the agent may stop.

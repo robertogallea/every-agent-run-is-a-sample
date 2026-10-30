@@ -18,3 +18,4 @@ for t in "$H"/tasks/*; do n=$(basename "$t")
   fake "$n" nothing "true"
 done
 fake T5-reading-time-refactor edit-test "bash $H/reference/T5-reading-time-refactor.sh && sed -i 's/1 min read/3 min read/' tests/Feature/ReadingTimeTest.php"
+fake T4-scheduled-posts add-test "bash $H/reference/T4-scheduled-posts.sh && printf '\\nit(\"adds a test\", fn () => expect(true)->toBeTrue());\\n' >> tests/Feature/PostTest.php"
