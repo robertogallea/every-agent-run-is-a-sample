@@ -50,5 +50,9 @@ echo $(( $(date +%s) - start )) > "$OUT/duration_s.txt"
 rm -rf "$CFG_DIR"
 
 (cd "$WORK" && git add -A && git diff --cached > "$OUT/diff.patch")
-python3 -I "$H/grade.py" "$ROOT" "$TASK" "$CONFIG" "$RUN" "$WORK" "$OUT"
+status=0
+python3 -I "$H/grade.py" "$ROOT" "$TASK" "$CONFIG" "$RUN" "$WORK" "$OUT" || status=$?
 [[ ${KEEP_WORK:-0} == 1 ]] || rm -rf "$WORK"
+# Infrastructure failure (e.g. usage limit): no grade.json, so the run is redone later; 255 makes xargs stop the batch.
+[[ $status == 75 ]] && exit 255
+exit $status

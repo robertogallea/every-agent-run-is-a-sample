@@ -100,9 +100,30 @@ def trajectory(stream_path):
     return fields
 
 
+def infra_failure(stream_path):
+    """An API error (rate limit, overload, auth) means the run never really happened: rerun it, don't grade it."""
+    for line in Path(stream_path).read_text().splitlines():
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("type") == "result" and (ev.get("api_error_status") or (ev.get("is_error") and not ev.get("num_turns"))):
+            return {"status": ev.get("api_error_status"), "message": (ev.get("result") or "")[:200]}
+    return None
+
+
 def main():
     root, task, config, run, work, out = sys.argv[1:7]
     root, work, out = Path(root), Path(work), Path(out)
+    results = Path(os.environ.get("RESULTS_DIR", root / "results"))
+    results.mkdir(parents=True, exist_ok=True)
+
+    failure = infra_failure(out / "stream.jsonl")
+    if failure:
+        with open(results / "infra.jsonl", "a") as f:
+            f.write(json.dumps({"task": task, "config": config, "run": run, **failure}) + "\n")
+        print(f"{task} {config} {run}: INFRA FAILURE {failure['status']} {failure['message']}")
+        sys.exit(75)
     template = root / "app-template"
     task_dir = root / "harness" / "tasks" / task
 
@@ -154,8 +175,6 @@ def main():
         **trajectory(out / "stream.jsonl"),
     }
     (out / "grade.json").write_text(json.dumps(record, indent=2))
-    results = Path(os.environ.get("RESULTS_DIR", root / "results"))
-    results.mkdir(parents=True, exist_ok=True)
     with open(results / "runs.jsonl", "a") as f:
         f.write(json.dumps(record) + "\n")
     print(f"{task} {config} {run}: severity {severity} core {core_pass:.2f} cost {record['cost_usd']}")
