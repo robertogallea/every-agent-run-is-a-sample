@@ -1,0 +1,3 @@
+it still creates a post whose title is already taken
+it handles a title that is already taken by someone else
+it keeps existing URLs working

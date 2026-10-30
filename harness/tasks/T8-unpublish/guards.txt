@@ -1,0 +1,2 @@
+it keeps the original date when an already published post stays published
+it forbids others from unpublishing

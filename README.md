@@ -11,6 +11,8 @@ A small, rerunnable experiment for the post "Every agent run is a sample". One c
 - `harness/run.sh`: one run in an isolated copy, then grading.
 - `harness/grade.py`: severity and recorded fields, appended to `results/runs.jsonl`.
 - `harness/reference/`: reference solutions, used only by `harness/selftest.sh` to check the grader.
+- `harness/retired-tasks/`, `harness/retired-reference/`: T2, T3 and T5, retired after the pilot because every one of their 12 pilot runs was perfect (pre-registered swap rule).
+- `harness/batch.sh`: runs task × config × repetition in a shuffled order, in parallel, skipping graded runs and stopping on API failures.
 - `harness/blind-sample.py`: draws the blind sample for manual grading.
 
 ## Configurations

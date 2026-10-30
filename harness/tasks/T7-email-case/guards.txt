@@ -1,0 +1,2 @@
+it logs in with the same mixed case used at registration
+it still rejects a wrong password

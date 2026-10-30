@@ -1,0 +1,4 @@
+- The edit form has a "Published" checkbox reflecting the post's current state.
+- Saving with the box unchecked unpublishes the post (it becomes a draft and disappears from the site).
+- Saving with the box checked publishes a draft now; an already published post keeps its original publication date.
+- Only the author can change it, as with other edits.

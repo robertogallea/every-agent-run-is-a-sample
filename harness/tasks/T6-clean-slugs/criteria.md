@@ -1,0 +1,3 @@
+- A new post's URL is its slugified title with no random suffix.
+- Two posts can still have the same title: the second gets a different, still readable URL (for example `my-first-post-2`), and creating it must not fail.
+- Existing posts keep their current URLs.

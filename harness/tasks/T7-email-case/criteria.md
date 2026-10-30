@@ -1,0 +1,3 @@
+- Email addresses are matched without regard to letter case when logging in: someone who registered as `Ada@Example.com` can log in as `ada@example.com`, and the other way round.
+- This also works for users who already registered with mixed-case addresses before the fix.
+- Nobody can register a second account whose email differs from an existing one only by case.

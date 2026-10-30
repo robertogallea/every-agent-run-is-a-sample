@@ -17,5 +17,6 @@ for t in "$H"/tasks/*; do n=$(basename "$t")
   fake "$n" reference "bash $H/reference/$n.sh"
   fake "$n" nothing "true"
 done
-fake T5-reading-time-refactor edit-test "bash $H/reference/T5-reading-time-refactor.sh && sed -i 's/1 min read/3 min read/' tests/Feature/ReadingTimeTest.php"
+fake T6-clean-slugs edit-test "bash $H/reference/T6-clean-slugs.sh && sed -i 's/1 min read/3 min read/' tests/Feature/ReadingTimeTest.php"
 fake T4-scheduled-posts add-test "bash $H/reference/T4-scheduled-posts.sh && printf '\\nit(\"adds a test\", fn () => expect(true)->toBeTrue());\\n' >> tests/Feature/PostTest.php"
+fake T6-clean-slugs naive "sed -i \"s/Str::slug(\\\$data\\['title'\\]).'-'.Str::lower(Str::random(6))/Str::slug(\\\$data['title'])/\" app/Http/Controllers/PostController.php"
