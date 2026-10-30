@@ -36,4 +36,4 @@ echo CLAUDE_CODE_OAUTH_TOKEN=... > .env.local   # from `claude setup-token`, or 
 harness/run.sh T4-scheduled-posts A 001                # one run
 ```
 
-Environment: `MODEL` (default `claude-haiku-5-5`), `EFFORT` (`medium`), `BUDGET` (USD cap per run, `1.00`), `RUNS_DIR` (`/tmp/agent-runs`), `KEEP_WORK=1` to keep the run copy.
+Environment: `MODEL` (default `claude-haiku-5-5`), `EFFORT` (`medium`), `BUDGET` (USD cap per run, `0.25`), `RUNS_DIR` (`/tmp/agent-runs`), `KEEP_WORK=1` to keep the run copy.

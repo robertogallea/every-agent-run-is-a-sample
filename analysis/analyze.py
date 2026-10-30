@@ -14,7 +14,7 @@ import numpy as np
 from scipy import stats
 
 CONFIGS = ["A", "B", "C", "D"]
-BOOT = 10_000
+BOOT = int(__import__("os").environ.get("BOOT", 10_000))
 rng = np.random.default_rng(20261030)
 
 
