@@ -24,21 +24,21 @@ args=(-p "$(cat "$H/tasks/$TASK/prompt.md")"
   --output-format stream-json --verbose
   --model "$MODEL" --effort "$EFFORT" --max-budget-usd "$BUDGET"
   --permission-mode dontAsk
-  --allowedTools "Read Edit Write Glob Grep Bash TodoWrite"
-  --disallowedTools ScheduleWakeup CronCreate CronDelete Monitor RemoteTrigger PushNotification)
+  --allowedTools "Read Edit Write Glob Grep Bash TodoWrite")
+deny=(ScheduleWakeup CronCreate CronDelete Monitor RemoteTrigger PushNotification)
 
 settings='{"sandbox":{"enabled":true,"autoAllowBashIfSandboxed":true}'
 if [[ $CONFIG == B || $CONFIG == D ]]; then
   python3 -c 'import sys; s=open(sys.argv[1]).read(); print(s.replace("{{CRITERIA}}", open(sys.argv[2]).read().strip()))' \
     "$H/configs/B/spec.md" "$H/tasks/$TASK/criteria.md" > "$OUT/spec.md"
   args+=(--append-system-prompt-file "$OUT/spec.md")
-  mapfile -t deny < "$H/configs/B/disallowed-tools.txt"
-  args+=(--disallowedTools "${deny[@]}")
+  mapfile -t -O "${#deny[@]}" deny < "$H/configs/B/disallowed-tools.txt"
 fi
 if [[ $CONFIG == C || $CONFIG == D ]]; then
   settings+=',"hooks":{"PostToolUse":[{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"'"$H"'/hooks/post-edit.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"'"$H"'/hooks/stop.sh"}]}]}'
 fi
 settings+='}'
+args+=(--disallowedTools "${deny[@]}")
 echo "$settings" > "$OUT/settings.json"
 args+=(--settings "$OUT/settings.json")
 
