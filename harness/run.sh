@@ -12,7 +12,7 @@ RUNS_DIR=${RUNS_DIR:-/tmp/agent-runs}
 OUT=$ROOT/results/raw/$TASK/$CONFIG/$RUN
 WORK=$RUNS_DIR/$TASK-$CONFIG-$RUN
 [ -f "$ROOT/.env.local" ] && set -a && . "$ROOT/.env.local" && set +a
-: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY must be set (or put it in .env.local)}"
+[[ -n ${ANTHROPIC_API_KEY:-} || -n ${CLAUDE_CODE_OAUTH_TOKEN:-} ]] || { echo "Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (claude setup-token), e.g. in .env.local" >&2; exit 1; }
 
 [ -e "$OUT/grade.json" ] && { echo "already done: $OUT"; exit 0; }
 rm -rf "$WORK" "$OUT"; mkdir -p "$OUT" "$RUNS_DIR"

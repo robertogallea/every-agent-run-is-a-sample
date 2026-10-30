@@ -32,7 +32,7 @@ All configs run with the Bash sandbox on, a fresh empty `CLAUDE_CONFIG_DIR` and 
 
 ```bash
 harness/selftest.sh                                    # grader check, no API calls
-export ANTHROPIC_API_KEY=...
+echo CLAUDE_CODE_OAUTH_TOKEN=... > .env.local   # from `claude setup-token`, or ANTHROPIC_API_KEY=... for API billing
 harness/run.sh T4-scheduled-posts A 001                # one run
 ```
 
