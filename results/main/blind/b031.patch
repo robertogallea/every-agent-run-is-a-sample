@@ -1,0 +1,50 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..6b8c1de 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -48,9 +48,15 @@ public function store(Request $request): RedirectResponse
+             'publish' => ['boolean'],
+         ]);
+ 
++        $base = Str::slug($data['title']) ?: 'post';
++        $slug = $base;
++        for ($n = 2; Post::where('slug', $slug)->exists(); $n++) {
++            $slug = $base.'-'.$n;
++        }
++
+         $post = $request->user()->posts()->create([
+             'title' => $data['title'],
+-            'slug' => Str::slug($data['title']).'-'.Str::lower(Str::random(6)),
++            'slug' => $slug,
+             'body' => $data['body'],
+             'published_at' => ($data['publish'] ?? false) ? now() : null,
+         ]);
+diff --git a/tests/Feature/PostTest.php b/tests/Feature/PostTest.php
+index 30cb0ff..a550f01 100644
+--- a/tests/Feature/PostTest.php
++++ b/tests/Feature/PostTest.php
+@@ -34,6 +34,24 @@
+     expect($user->posts()->where('title', 'Mine')->exists())->toBeTrue();
+ });
+ 
++it('creates a post with a clean slug from its title', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'Text', 'publish' => true]);
++
++    expect($user->posts()->where('title', 'My First Post')->value('slug'))->toBe('my-first-post');
++});
++
++it('suffixes the slug when the title is already taken', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'Same Title', 'body' => 'Text']);
++    $this->actingAs($user)->post('/posts', ['title' => 'Same Title', 'body' => 'Text']);
++
++    expect(Post::where('title', 'Same Title')->orderBy('id')->pluck('slug')->all())
++        ->toBe(['same-title', 'same-title-2']);
++});
++
+ it('requires login to create a post', function () {
+     $this->get('/posts/create')->assertRedirect(route('login'));
+ });

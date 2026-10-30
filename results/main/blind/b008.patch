@@ -1,0 +1,78 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..aa3c44e 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -27,7 +27,7 @@ public function index(): View
+ 
+     public function show(Post $post): View
+     {
+-        abort_unless($post->published_at !== null, 404);
++        abort_unless($post->isPublished(), 404);
+ 
+         $body = preg_replace('/```.*?```/s', '', $post->body) ?? '';
+         $minutes = max(1, (int) ceil(str_word_count(strip_tags($body)) / 200));
+diff --git a/app/Models/Post.php b/app/Models/Post.php
+index 186e8b2..dd3d9e1 100644
+--- a/app/Models/Post.php
++++ b/app/Models/Post.php
+@@ -40,7 +40,12 @@ public function user(): BelongsTo
+     /** @param Builder<Post> $query */
+     public function scopePublished(Builder $query): void
+     {
+-        $query->whereNotNull('published_at');
++        $query->whereNotNull('published_at')->where('published_at', '<=', now());
++    }
++
++    public function isPublished(): bool
++    {
++        return $this->published_at !== null && $this->published_at->lte(now());
+     }
+ 
+     public function getRouteKeyName(): string
+diff --git a/tests/Feature/ScheduledPostTest.php b/tests/Feature/ScheduledPostTest.php
+new file mode 100644
+index 0000000..8f521c3
+--- /dev/null
++++ b/tests/Feature/ScheduledPostTest.php
+@@ -0,0 +1,41 @@
++<?php
++
++use App\Models\Post;
++
++it('hides a scheduled post from the list until its date', function () {
++    Post::factory()->create(['title' => 'Launch day', 'published_at' => now()->addDay()]);
++
++    $this->get('/')
++        ->assertOk()
++        ->assertDontSee('Launch day');
++});
++
++it('returns 404 for a scheduled post until its date', function () {
++    $post = Post::factory()->create(['published_at' => now()->addDay()]);
++
++    $this->get(route('posts.show', $post))->assertNotFound();
++});
++
++it('shows a scheduled post once its date has passed', function () {
++    $post = Post::factory()->create(['title' => 'Launch day', 'published_at' => now()->addDay()]);
++
++    $this->travelTo(now()->addDays(2));
++
++    $this->get('/')->assertOk()->assertSee('Launch day');
++    $this->get(route('posts.show', $post))->assertOk()->assertSee('Launch day');
++});
++
++it('keeps a past-dated post visible', function () {
++    $post = Post::factory()->create(['title' => 'Old news', 'published_at' => now()->subWeek()]);
++
++    $this->get('/')->assertOk()->assertSee('Old news');
++    $this->get(route('posts.show', $post))->assertOk()->assertSee('Old news');
++});
++
++it('still lets the author open a scheduled post for editing', function () {
++    $post = Post::factory()->create(['published_at' => now()->addDay()]);
++
++    $this->actingAs($post->user)
++        ->get(route('posts.edit', $post))
++        ->assertOk();
++});

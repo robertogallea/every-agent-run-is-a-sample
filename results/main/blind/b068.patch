@@ -1,0 +1,90 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..d028c2a 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -72,9 +72,15 @@ public function update(Request $request, Post $post): RedirectResponse
+         $data = $request->validate([
+             'title' => ['required', 'string', 'max:255'],
+             'body' => ['required', 'string'],
++            'publish' => ['boolean'],
+         ]);
+ 
+-        $post->update($data);
++        $post->update([
++            'title' => $data['title'],
++            'body' => $data['body'],
++            // Keep the original publish time when an already-published post is saved again.
++            'published_at' => $request->boolean('publish') ? ($post->published_at ?? now()) : null,
++        ]);
+ 
+         return redirect()->route('posts.edit', $post);
+     }
+diff --git a/resources/views/posts/edit.blade.php b/resources/views/posts/edit.blade.php
+index ada47b5..a43e1e5 100644
+--- a/resources/views/posts/edit.blade.php
++++ b/resources/views/posts/edit.blade.php
+@@ -7,6 +7,7 @@
+     @method('PUT')
+     <input name="title" value="{{ old('title', $post->title) }}">
+     <textarea name="body">{{ old('body', $post->body) }}</textarea>
++    <label><input type="checkbox" name="publish" value="1" @checked(session()->hasOldInput() ? old('publish') : $post->published_at !== null)> Published</label>
+     @foreach ($errors->all() as $error)<p>{{ $error }}</p>@endforeach
+     <button>Save</button>
+ </form>
+diff --git a/tests/Feature/PostTest.php b/tests/Feature/PostTest.php
+index 30cb0ff..fd18bb7 100644
+--- a/tests/Feature/PostTest.php
++++ b/tests/Feature/PostTest.php
+@@ -48,6 +48,52 @@
+     expect($post->fresh()->title)->toBe('Updated');
+ });
+ 
++it('lets the author unpublish a post from the edit page', function () {
++    $post = Post::factory()->create();
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => $post->title, 'body' => $post->body])
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at)->toBeNull();
++    $this->get(route('posts.show', $post))->assertNotFound();
++});
++
++it('lets the author publish a draft from the edit page', function () {
++    $post = Post::factory()->draft()->create();
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => $post->title, 'body' => $post->body, 'publish' => '1'])
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at)->not->toBeNull();
++    $this->get(route('posts.show', $post))->assertOk();
++});
++
++it('keeps the original publish time when a published post is saved again', function () {
++    $post = Post::factory()->create();
++    $publishedAt = $post->published_at;
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => 'Edited', 'body' => $post->body, 'publish' => '1'])
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at->equalTo($publishedAt))->toBeTrue();
++});
++
++it('renders the publish checkbox on the edit page reflecting the post state', function () {
++    $published = Post::factory()->create();
++    $draft = Post::factory()->draft()->create(['user_id' => $published->user_id]);
++
++    $this->actingAs($published->user)->get(route('posts.edit', $published))
++        ->assertSee('name="publish"', false)
++        ->assertSee('checked', false);
++
++    $this->actingAs($draft->user)->get(route('posts.edit', $draft))
++        ->assertSee('name="publish"', false)
++        ->assertDontSee('checked', false);
++});
++
+ it('forbids editing someone else\'s post', function () {
+     $post = Post::factory()->create();
+ 

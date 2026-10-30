@@ -1,0 +1,55 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..bf4bf98 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -50,7 +50,7 @@ public function store(Request $request): RedirectResponse
+ 
+         $post = $request->user()->posts()->create([
+             'title' => $data['title'],
+-            'slug' => Str::slug($data['title']).'-'.Str::lower(Str::random(6)),
++            'slug' => $this->uniqueSlug($data['title']),
+             'body' => $data['body'],
+             'published_at' => ($data['publish'] ?? false) ? now() : null,
+         ]);
+@@ -58,6 +58,21 @@ public function store(Request $request): RedirectResponse
+         return redirect()->route('posts.edit', $post);
+     }
+ 
++    /**
++     * Use the plain title slug, adding -2, -3, ... only when it is already taken.
++     */
++    private function uniqueSlug(string $title): string
++    {
++        $base = Str::slug($title) ?: 'post';
++        $slug = $base;
++
++        for ($suffix = 2; Post::where('slug', $slug)->exists(); $suffix++) {
++            $slug = $base.'-'.$suffix;
++        }
++
++        return $slug;
++    }
++
+     public function edit(Post $post): View
+     {
+         Gate::authorize('update', $post);
+diff --git a/tests/Feature/PostTest.php b/tests/Feature/PostTest.php
+index 30cb0ff..b463c10 100644
+--- a/tests/Feature/PostTest.php
++++ b/tests/Feature/PostTest.php
+@@ -34,6 +34,15 @@
+     expect($user->posts()->where('title', 'Mine')->exists())->toBeTrue();
+ });
+ 
++it('uses the plain title as the slug and suffixes duplicates', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'Text']);
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'Text']);
++
++    expect(Post::pluck('slug')->all())->toBe(['my-first-post', 'my-first-post-2']);
++});
++
+ it('requires login to create a post', function () {
+     $this->get('/posts/create')->assertRedirect(route('login'));
+ });

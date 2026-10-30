@@ -1,0 +1,44 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..6cb5fb7 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -27,7 +27,7 @@ public function index(): View
+ 
+     public function show(Post $post): View
+     {
+-        abort_unless($post->published_at !== null, 404);
++        abort_unless($post->published_at !== null && $post->published_at->lte(now()), 404);
+ 
+         $body = preg_replace('/```.*?```/s', '', $post->body) ?? '';
+         $minutes = max(1, (int) ceil(str_word_count(strip_tags($body)) / 200));
+diff --git a/app/Models/Post.php b/app/Models/Post.php
+index 186e8b2..9c3143b 100644
+--- a/app/Models/Post.php
++++ b/app/Models/Post.php
+@@ -40,7 +40,7 @@ public function user(): BelongsTo
+     /** @param Builder<Post> $query */
+     public function scopePublished(Builder $query): void
+     {
+-        $query->whereNotNull('published_at');
++        $query->whereNotNull('published_at')->where('published_at', '<=', now());
+     }
+ 
+     public function getRouteKeyName(): string
+diff --git a/tests/Feature/PostTest.php b/tests/Feature/PostTest.php
+index 30cb0ff..30637f5 100644
+--- a/tests/Feature/PostTest.php
++++ b/tests/Feature/PostTest.php
+@@ -19,6 +19,13 @@
+     $this->get(route('posts.show', $post))->assertOk()->assertSee('Readable');
+ });
+ 
++it('hides posts scheduled for the future', function () {
++    $scheduled = Post::factory()->create(['title' => 'Future launch', 'published_at' => now()->addDay()]);
++
++    $this->get('/')->assertOk()->assertDontSee('Future launch');
++    $this->get(route('posts.show', $scheduled))->assertNotFound();
++});
++
+ it('returns 404 for a draft', function () {
+     $post = Post::factory()->draft()->create();
+ 

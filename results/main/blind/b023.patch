@@ -1,0 +1,91 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..8827579 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -50,7 +50,7 @@ public function store(Request $request): RedirectResponse
+ 
+         $post = $request->user()->posts()->create([
+             'title' => $data['title'],
+-            'slug' => Str::slug($data['title']).'-'.Str::lower(Str::random(6)),
++            'slug' => $this->uniqueSlug($data['title']),
+             'body' => $data['body'],
+             'published_at' => ($data['publish'] ?? false) ? now() : null,
+         ]);
+@@ -78,4 +78,19 @@ public function update(Request $request, Post $post): RedirectResponse
+ 
+         return redirect()->route('posts.edit', $post);
+     }
++
++    /**
++     * Use the slugified title, adding -2, -3, ... only when another post already has that slug.
++     */
++    private function uniqueSlug(string $title): string
++    {
++        $base = Str::slug($title) ?: 'post';
++        $slug = $base;
++
++        for ($n = 2; Post::where('slug', $slug)->exists(); $n++) {
++            $slug = $base.'-'.$n;
++        }
++
++        return $slug;
++    }
+ }
+diff --git a/tests/Feature/PostSlugTest.php b/tests/Feature/PostSlugTest.php
+new file mode 100644
+index 0000000..8682eaa
+--- /dev/null
++++ b/tests/Feature/PostSlugTest.php
+@@ -0,0 +1,52 @@
++<?php
++
++use App\Models\Post;
++use App\Models\User;
++
++it('uses the slugified title as the url without a random suffix', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'Text', 'publish' => true])
++        ->assertRedirect();
++
++    expect($user->posts()->first()->slug)->toBe('my-first-post');
++});
++
++it('gives a post with a duplicate title a numbered url instead of failing', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'One']);
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'Two'])
++        ->assertRedirect();
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'Three'])
++        ->assertRedirect();
++
++    expect(Post::pluck('slug')->all())->toBe(['my-first-post', 'my-first-post-2', 'my-first-post-3']);
++});
++
++it('skips a numbered slug that is already taken by another title', function () {
++    $user = User::factory()->create();
++    Post::factory()->create(['user_id' => $user->id, 'title' => 'Post 2', 'slug' => 'post-2']);
++
++    $this->actingAs($user)->post('/posts', ['title' => 'Post', 'body' => 'Text']);
++    $this->actingAs($user)->post('/posts', ['title' => 'Post', 'body' => 'Text']);
++
++    expect(Post::where('title', 'Post')->pluck('slug')->all())->toBe(['post', 'post-3']);
++});
++
++it('falls back to post when the title has no letters or digits', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => '!!!', 'body' => 'Text']);
++
++    expect($user->posts()->first()->slug)->toBe('post');
++});
++
++it('keeps the existing url when a post is edited', function () {
++    $post = Post::factory()->create(['title' => 'Original', 'slug' => 'original-abc123']);
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => 'Renamed', 'body' => 'New body']);
++
++    expect($post->fresh()->slug)->toBe('original-abc123');
++});

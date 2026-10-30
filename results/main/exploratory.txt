@@ -1,0 +1,40 @@
+== Severity by early decision, within task x config cells that vary ==
+7 varying cells, 140 runs
+
+read a test before first edit:
+  False        n=  3  pass 0.00  severe 1.00  sev [0, 0, 0, 3, 0]
+  True         n=137  pass 0.70  severe 0.28  sev [96, 0, 3, 17, 21]
+
+todo list before first edit:
+  False        n=140  pass 0.69  severe 0.29  sev [96, 0, 3, 20, 21]
+
+first edited path:
+  app          n= 96  pass 0.83  severe 0.15  sev [80, 0, 2, 1, 13]
+  database     n=  2  pass 0.00  severe 1.00  sev [0, 0, 0, 2, 0]
+  none         n= 32  pass 0.34  severe 0.66  sev [11, 0, 0, 13, 8]
+  resources    n=  1  pass 1.00  severe 0.00  sev [1, 0, 0, 0, 0]
+  routes       n=  4  pass 0.00  severe 1.00  sev [0, 0, 0, 4, 0]
+  tests        n=  5  pass 0.80  severe 0.00  sev [4, 0, 1, 0, 0]
+
+  per varying cell (read tests first: yes / no -> severe rate):
+    T1-email-verification    A: yes 0.65 (n=20)  no -
+    T1-email-verification    C: yes 0.40 (n=20)  no -
+    T4-scheduled-posts       A: yes 0.35 (n=17)  no 1.00 (n=3)
+    T4-scheduled-posts       C: yes 0.30 (n=20)  no -
+    T7-email-case            C: yes 0.00 (n=20)  no -
+    T8-unpublish             A: yes 0.20 (n=20)  no -
+    T8-unpublish             C: yes 0.05 (n=20)  no -
+
+== Destructive runs: what was touched ==
+  T1-email-verification    A x13: M tests/Feature/AuthTest.php
+  T1-email-verification    C x8: M tests/Feature/AuthTest.php
+
+== Cost and effort per configuration ==
+cfg  cost$ total  cost$ median  turns median  duration_s median  hook_blocks total  runs w/ blocks  perm_denials total
+A         1.05        0.0100          11.5               37.5                  0               0                   0
+B         1.03        0.0084          11.0               40.5                  0               0                   0
+C         1.10        0.0102          13.0               42.5                 75              45                   0
+D         1.05        0.0085          12.0               47.5                133              56                   0
+all       4.22
+
+end states: {'success': 400}

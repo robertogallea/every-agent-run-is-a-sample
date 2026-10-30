@@ -1,0 +1,124 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..8c7180a 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -72,9 +72,15 @@ public function update(Request $request, Post $post): RedirectResponse
+         $data = $request->validate([
+             'title' => ['required', 'string', 'max:255'],
+             'body' => ['required', 'string'],
++            'publish' => ['boolean'],
+         ]);
+ 
+-        $post->update($data);
++        $post->update([
++            'title' => $data['title'],
++            'body' => $data['body'],
++            // Keep the original publication date when the post is already live.
++            'published_at' => ($data['publish'] ?? false) ? ($post->published_at ?? now()) : null,
++        ]);
+ 
+         return redirect()->route('posts.edit', $post);
+     }
+diff --git a/resources/views/posts/edit.blade.php b/resources/views/posts/edit.blade.php
+index ada47b5..af75e72 100644
+--- a/resources/views/posts/edit.blade.php
++++ b/resources/views/posts/edit.blade.php
+@@ -7,6 +7,7 @@
+     @method('PUT')
+     <input name="title" value="{{ old('title', $post->title) }}">
+     <textarea name="body">{{ old('body', $post->body) }}</textarea>
++    <label><input type="checkbox" name="publish" value="1" @checked(old() ? old('publish') : $post->published_at !== null)> Published</label>
+     @foreach ($errors->all() as $error)<p>{{ $error }}</p>@endforeach
+     <button>Save</button>
+ </form>
+diff --git a/tests/Feature/PostPublishingTest.php b/tests/Feature/PostPublishingTest.php
+new file mode 100644
+index 0000000..441b35d
+--- /dev/null
++++ b/tests/Feature/PostPublishingTest.php
+@@ -0,0 +1,85 @@
++<?php
++
++use App\Models\Post;
++use App\Models\User;
++
++it('shows the published checkbox ticked for a published post', function () {
++    $post = Post::factory()->create();
++
++    $this->actingAs($post->user)
++        ->get(route('posts.edit', $post))
++        ->assertOk()
++        ->assertSee('name="publish" value="1" checked', false);
++});
++
++it('shows the published checkbox unticked for a draft', function () {
++    $post = Post::factory()->draft()->create();
++
++    $this->actingAs($post->user)
++        ->get(route('posts.edit', $post))
++        ->assertOk()
++        ->assertDontSee('checked', false);
++});
++
++it('publishes a draft when the author saves with the box ticked', function () {
++    $post = Post::factory()->draft()->create();
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => $post->title, 'body' => $post->body, 'publish' => '1'])
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at)->not->toBeNull();
++});
++
++it('keeps the original publication date when a published post is saved with the box ticked', function () {
++    $post = Post::factory()->create(['published_at' => now()->subWeek()]);
++    $original = $post->published_at->toDateTimeString();
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => 'Edited', 'body' => $post->body, 'publish' => '1'])
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at->toDateTimeString())->toBe($original);
++});
++
++it('unpublishes a post when the author saves with the box unticked', function () {
++    $post = Post::factory()->create();
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => $post->title, 'body' => $post->body])
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at)->toBeNull();
++});
++
++it('removes an unpublished post from the site', function () {
++    $post = Post::factory()->create(['title' => 'Going offline']);
++
++    $this->actingAs($post->user)
++        ->put(route('posts.update', $post), ['title' => 'Going offline', 'body' => $post->body]);
++
++    $this->get('/')->assertDontSee('Going offline');
++    $this->get(route('posts.show', $post))->assertNotFound();
++});
++
++it('forbids a non-author from unpublishing a post', function () {
++    $post = Post::factory()->create();
++
++    $this->actingAs(User::factory()->create())
++        ->put(route('posts.update', $post), ['title' => $post->title, 'body' => $post->body])
++        ->assertForbidden();
++
++    expect($post->fresh()->published_at)->not->toBeNull();
++});
++
++it('keeps the box unticked as submitted after a validation error', function () {
++    $post = Post::factory()->create();
++
++    $this->actingAs($post->user)
++        ->followingRedirects()
++        ->from(route('posts.edit', $post))
++        ->put(route('posts.update', $post), ['title' => '', 'body' => $post->body])
++        ->assertOk()
++        ->assertSee('name="publish" value="1"', false)
++        ->assertDontSee('checked', false);
++});

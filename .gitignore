@@ -1,4 +1,5 @@
-results/
+results/raw/
+results/*.log
 app-template/vendor/
 app-template/node_modules/
 app-template/.env

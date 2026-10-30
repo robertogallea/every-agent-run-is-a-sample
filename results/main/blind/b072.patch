@@ -1,0 +1,135 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..896e655 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -72,9 +72,14 @@ public function update(Request $request, Post $post): RedirectResponse
+         $data = $request->validate([
+             'title' => ['required', 'string', 'max:255'],
+             'body' => ['required', 'string'],
++            'publish' => ['boolean'],
+         ]);
+ 
+-        $post->update($data);
++        $post->update([
++            'title' => $data['title'],
++            'body' => $data['body'],
++            'published_at' => ($data['publish'] ?? false) ? ($post->published_at ?? now()) : null,
++        ]);
+ 
+         return redirect()->route('posts.edit', $post);
+     }
+diff --git a/resources/views/posts/edit.blade.php b/resources/views/posts/edit.blade.php
+index ada47b5..a43e1e5 100644
+--- a/resources/views/posts/edit.blade.php
++++ b/resources/views/posts/edit.blade.php
+@@ -7,6 +7,7 @@
+     @method('PUT')
+     <input name="title" value="{{ old('title', $post->title) }}">
+     <textarea name="body">{{ old('body', $post->body) }}</textarea>
++    <label><input type="checkbox" name="publish" value="1" @checked(session()->hasOldInput() ? old('publish') : $post->published_at !== null)> Published</label>
+     @foreach ($errors->all() as $error)<p>{{ $error }}</p>@endforeach
+     <button>Save</button>
+ </form>
+diff --git a/tests/Feature/PostPublishingTest.php b/tests/Feature/PostPublishingTest.php
+new file mode 100644
+index 0000000..4f7800e
+--- /dev/null
++++ b/tests/Feature/PostPublishingTest.php
+@@ -0,0 +1,97 @@
++<?php
++
++use App\Models\Post;
++use App\Models\User;
++
++it('shows the published checkbox checked for a published post', function () {
++    $user = User::factory()->create();
++    $post = Post::factory()->for($user)->create();
++
++    $this->actingAs($user)->get(route('posts.edit', $post))
++        ->assertOk()
++        ->assertSee('name="publish"', false)
++        ->assertSee('checked', false);
++});
++
++it('shows the published checkbox unchecked for a draft', function () {
++    $user = User::factory()->create();
++    $post = Post::factory()->draft()->for($user)->create();
++
++    $this->actingAs($user)->get(route('posts.edit', $post))
++        ->assertOk()
++        ->assertSee('name="publish"', false)
++        ->assertDontSee('checked', false);
++});
++
++it('unpublishes a post when saved with the box unchecked', function () {
++    $user = User::factory()->create();
++    $post = Post::factory()->for($user)->create();
++
++    $this->actingAs($user)->put(route('posts.update', $post), [
++        'title' => $post->title,
++        'body' => $post->body,
++    ])->assertRedirect(route('posts.edit', $post));
++
++    expect($post->refresh()->published_at)->toBeNull();
++    $this->get(route('posts.show', $post))->assertNotFound();
++    $this->get('/')->assertDontSee($post->title);
++});
++
++it('publishes a draft when saved with the box checked', function () {
++    $user = User::factory()->create();
++    $post = Post::factory()->draft()->for($user)->create();
++
++    $this->actingAs($user)->put(route('posts.update', $post), [
++        'title' => $post->title,
++        'body' => $post->body,
++        'publish' => '1',
++    ])->assertRedirect(route('posts.edit', $post));
++
++    expect($post->refresh()->published_at)->not->toBeNull();
++    $this->get(route('posts.show', $post))->assertOk();
++});
++
++it('keeps the original publication date when a published post is saved with the box checked', function () {
++    $user = User::factory()->create();
++    $post = Post::factory()->for($user)->create();
++    $originalPublishedAt = $post->published_at->copy();
++
++    $this->actingAs($user)->put(route('posts.update', $post), [
++        'title' => 'Renamed',
++        'body' => $post->body,
++        'publish' => '1',
++    ])->assertRedirect(route('posts.edit', $post));
++
++    expect($post->refresh()->published_at->equalTo($originalPublishedAt))->toBeTrue();
++    expect($post->title)->toBe('Renamed');
++});
++
++it('does not let another user change the published state', function () {
++    $author = User::factory()->create();
++    $other = User::factory()->create();
++    $post = Post::factory()->for($author)->create();
++    $originalPublishedAt = $post->published_at->copy();
++
++    $this->actingAs($other)->put(route('posts.update', $post), [
++        'title' => $post->title,
++        'body' => $post->body,
++    ])->assertForbidden();
++
++    expect($post->refresh()->published_at->equalTo($originalPublishedAt))->toBeTrue();
++});
++
++it('keeps the box unchecked after a validation error when it was unchecked', function () {
++    $user = User::factory()->create();
++    $post = Post::factory()->for($user)->create();
++
++    $this->actingAs($user)->from(route('posts.edit', $post))
++        ->put(route('posts.update', $post), [
++            'title' => '',
++            'body' => $post->body,
++        ])
++        ->assertRedirect(route('posts.edit', $post))
++        ->assertSessionHasErrors('title');
++
++    $this->actingAs($user)->get(route('posts.edit', $post))
++        ->assertDontSee('checked', false);
++});

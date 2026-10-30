@@ -1,0 +1,99 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..dec66ce 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -78,4 +78,22 @@ public function update(Request $request, Post $post): RedirectResponse
+ 
+         return redirect()->route('posts.edit', $post);
+     }
++
++    public function publish(Post $post): RedirectResponse
++    {
++        Gate::authorize('update', $post);
++
++        $post->update(['published_at' => $post->published_at ?? now()]);
++
++        return redirect()->route('posts.edit', $post);
++    }
++
++    public function unpublish(Post $post): RedirectResponse
++    {
++        Gate::authorize('update', $post);
++
++        $post->update(['published_at' => null]);
++
++        return redirect()->route('posts.edit', $post);
++    }
+ }
+diff --git a/resources/views/posts/edit.blade.php b/resources/views/posts/edit.blade.php
+index ada47b5..9186081 100644
+--- a/resources/views/posts/edit.blade.php
++++ b/resources/views/posts/edit.blade.php
+@@ -2,6 +2,20 @@
+ 
+ @section('content')
+ <h1>Edit post</h1>
++<p>Status: {{ $post->published_at ? 'Published' : 'Draft' }}</p>
++@if ($post->published_at)
++<form method="POST" action="{{ route('posts.unpublish', $post) }}">
++    @csrf
++    @method('PUT')
++    <button>Unpublish</button>
++</form>
++@else
++<form method="POST" action="{{ route('posts.publish', $post) }}">
++    @csrf
++    @method('PUT')
++    <button>Publish</button>
++</form>
++@endif
+ <form method="POST" action="{{ route('posts.update', $post) }}">
+     @csrf
+     @method('PUT')
+diff --git a/routes/web.php b/routes/web.php
+index 44a0484..4e502fe 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -20,6 +20,8 @@
+     Route::post('/posts', [PostController::class, 'store'])->name('posts.store');
+     Route::get('/posts/{post}/edit', [PostController::class, 'edit'])->name('posts.edit');
+     Route::put('/posts/{post}', [PostController::class, 'update'])->name('posts.update');
++    Route::put('/posts/{post}/publish', [PostController::class, 'publish'])->name('posts.publish');
++    Route::put('/posts/{post}/unpublish', [PostController::class, 'unpublish'])->name('posts.unpublish');
+ });
+ 
+ Route::get('/posts/{post}', [PostController::class, 'show'])->name('posts.show');
+diff --git a/tests/Feature/PostTest.php b/tests/Feature/PostTest.php
+index 30cb0ff..2763bda 100644
+--- a/tests/Feature/PostTest.php
++++ b/tests/Feature/PostTest.php
+@@ -55,3 +55,29 @@
+         ->put(route('posts.update', $post), ['title' => 'Hijacked', 'body' => 'x'])
+         ->assertForbidden();
+ });
++
++it('lets the author unpublish and republish their post', function () {
++    $post = Post::factory()->create();
++
++    $this->actingAs($post->user)
++        ->put(route('posts.unpublish', $post))
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at)->toBeNull();
++
++    $this->actingAs($post->user)
++        ->put(route('posts.publish', $post))
++        ->assertRedirect();
++
++    expect($post->fresh()->published_at)->not->toBeNull();
++});
++
++it('forbids publishing or unpublishing someone else\'s post', function () {
++    $post = Post::factory()->create();
++
++    $this->actingAs(User::factory()->create())
++        ->put(route('posts.unpublish', $post))
++        ->assertForbidden();
++
++    expect($post->fresh()->published_at)->not->toBeNull();
++});

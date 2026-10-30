@@ -1,0 +1,108 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..9016d47 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -5,6 +5,7 @@
+ use App\Models\Post;
+ use Illuminate\Http\RedirectResponse;
+ use Illuminate\Http\Request;
++use Illuminate\Support\Carbon;
+ use Illuminate\Support\Facades\Gate;
+ use Illuminate\Support\Str;
+ use Illuminate\View\View;
+@@ -27,7 +28,7 @@ public function index(): View
+ 
+     public function show(Post $post): View
+     {
+-        abort_unless($post->published_at !== null, 404);
++        abort_unless($post->published_at !== null && $post->published_at->isPast(), 404);
+ 
+         $body = preg_replace('/```.*?```/s', '', $post->body) ?? '';
+         $minutes = max(1, (int) ceil(str_word_count(strip_tags($body)) / 200));
+@@ -46,13 +47,21 @@ public function store(Request $request): RedirectResponse
+             'title' => ['required', 'string', 'max:255'],
+             'body' => ['required', 'string'],
+             'publish' => ['boolean'],
++            'publish_at' => ['nullable', 'date'],
+         ]);
+ 
++        // A scheduled time implies publishing; otherwise "Publish now" uses the current time.
++        $publishAt = match (true) {
++            filled($data['publish_at'] ?? null) => Carbon::parse($data['publish_at']),
++            ($data['publish'] ?? false) => now(),
++            default => null,
++        };
++
+         $post = $request->user()->posts()->create([
+             'title' => $data['title'],
+             'slug' => Str::slug($data['title']).'-'.Str::lower(Str::random(6)),
+             'body' => $data['body'],
+-            'published_at' => ($data['publish'] ?? false) ? now() : null,
++            'published_at' => $publishAt,
+         ]);
+ 
+         return redirect()->route('posts.edit', $post);
+diff --git a/app/Models/Post.php b/app/Models/Post.php
+index 186e8b2..9c3143b 100644
+--- a/app/Models/Post.php
++++ b/app/Models/Post.php
+@@ -40,7 +40,7 @@ public function user(): BelongsTo
+     /** @param Builder<Post> $query */
+     public function scopePublished(Builder $query): void
+     {
+-        $query->whereNotNull('published_at');
++        $query->whereNotNull('published_at')->where('published_at', '<=', now());
+     }
+ 
+     public function getRouteKeyName(): string
+diff --git a/resources/views/posts/create.blade.php b/resources/views/posts/create.blade.php
+index e0d4f9a..de39487 100644
+--- a/resources/views/posts/create.blade.php
++++ b/resources/views/posts/create.blade.php
+@@ -7,6 +7,7 @@
+     <input name="title" value="{{ old('title') }}" placeholder="Title">
+     <textarea name="body">{{ old('body') }}</textarea>
+     <label><input type="checkbox" name="publish" value="1"> Publish now</label>
++    <label>Or publish at <input type="datetime-local" name="publish_at" value="{{ old('publish_at') }}"></label>
+     @foreach ($errors->all() as $error)<p>{{ $error }}</p>@endforeach
+     <button>Save</button>
+ </form>
+diff --git a/tests/Feature/PostTest.php b/tests/Feature/PostTest.php
+index 30cb0ff..6d32b7c 100644
+--- a/tests/Feature/PostTest.php
++++ b/tests/Feature/PostTest.php
+@@ -55,3 +55,34 @@
+         ->put(route('posts.update', $post), ['title' => 'Hijacked', 'body' => 'x'])
+         ->assertForbidden();
+ });
++
++it('hides a post scheduled for the future until its publish time', function () {
++    $post = Post::factory()->create(['title' => 'Big launch', 'published_at' => now()->addDay()]);
++
++    $this->get('/')->assertOk()->assertDontSee('Big launch');
++    $this->get(route('posts.show', $post))->assertNotFound();
++
++    $this->travel(2)->days();
++
++    $this->get('/')->assertOk()->assertSee('Big launch');
++    $this->get(route('posts.show', $post))->assertOk();
++});
++
++it('schedules a post when a publish time is given', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'Later', 'body' => 'Text', 'publish_at' => now()->addDay()->toDateTimeString()])
++        ->assertRedirect();
++
++    $post = $user->posts()->where('title', 'Later')->firstOrFail();
++    expect($post->published_at->isFuture())->toBeTrue();
++    $this->get(route('posts.show', $post))->assertNotFound();
++});
++
++it('keeps a post as a draft when neither publish nor a time is set', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'Draft only', 'body' => 'Text'])->assertRedirect();
++
++    expect($user->posts()->where('title', 'Draft only')->firstOrFail()->published_at)->toBeNull();
++});

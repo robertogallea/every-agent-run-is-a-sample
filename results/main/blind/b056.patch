@@ -1,0 +1,55 @@
+diff --git a/app/Http/Controllers/Auth/LoginController.php b/app/Http/Controllers/Auth/LoginController.php
+index 85383e7..7806da8 100644
+--- a/app/Http/Controllers/Auth/LoginController.php
++++ b/app/Http/Controllers/Auth/LoginController.php
+@@ -18,6 +18,9 @@ public function create(): View
+ 
+     public function store(Request $request): RedirectResponse
+     {
++        // Match the lowercase emails stored at registration.
++        $request->merge(['email' => $request->string('email')->lower()->toString()]);
++
+         $credentials = $request->validate([
+             'email' => ['required', 'email'],
+             'password' => ['required', 'string'],
+diff --git a/app/Http/Controllers/Auth/RegisterController.php b/app/Http/Controllers/Auth/RegisterController.php
+index d5d026f..3fa0621 100644
+--- a/app/Http/Controllers/Auth/RegisterController.php
++++ b/app/Http/Controllers/Auth/RegisterController.php
+@@ -19,6 +19,9 @@ public function create(): View
+ 
+     public function store(Request $request): RedirectResponse
+     {
++        // Emails are stored lowercase so logins match regardless of how the address was typed.
++        $request->merge(['email' => $request->string('email')->lower()->toString()]);
++
+         $data = $request->validate([
+             'name' => ['required', 'string', 'max:255'],
+             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+diff --git a/tests/Feature/AuthTest.php b/tests/Feature/AuthTest.php
+index bfc16cd..d07974c 100644
+--- a/tests/Feature/AuthTest.php
++++ b/tests/Feature/AuthTest.php
+@@ -32,6 +32,22 @@
+     $this->assertGuest();
+ });
+ 
++it('logs in regardless of email case', function () {
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => 'Ada.Lovelace@Example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ]);
++    $this->post('/logout');
++
++    $this->post('/login', ['email' => 'ada.lovelace@example.COM', 'password' => 'secret-password'])
++        ->assertRedirect(route('posts.index'));
++
++    $this->assertAuthenticated();
++    expect(User::where('email', 'ada.lovelace@example.com')->exists())->toBeTrue();
++});
++
+ it('logs out', function () {
+     $this->actingAs(User::factory()->create())
+         ->post('/logout')

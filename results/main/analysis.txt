@@ -1,0 +1,33 @@
+400 runs, 5 tasks, runs per cell: [20]
+
+cfg               pass            severe            pass^5  mean sev
+A     0.74 [0.67,0.81]  0.26 [0.19,0.33]  0.46 [0.42,0.57]      0.91
+B     1.00 [1.00,1.00]  0.00 [0.00,0.00]  1.00 [1.00,1.00]      0.00
+C     0.82 [0.75,0.89]  0.15 [0.09,0.21]  0.47 [0.37,0.63]      0.59
+D     1.00 [1.00,1.00]  0.00 [0.00,0.00]  1.00 [1.00,1.00]      0.00
+
+Primary 1: A vs D
+  pass D-A = +0.260 [+0.190,+0.330]
+  severe D-A = -0.260 [-0.330,-0.190]
+  severity Mann-Whitney U=3700 p=0.0000, Cliff's delta (D vs A) = -0.260 (negative = D less severe)
+
+Primary 2: interaction (D-C)-(B-A) on pass = -0.080 [-0.180,+0.020]
+
+H-amb: severe-failure rate, B - A, within task classes
+  ambiguous (T4-scheduled-posts, T7-email-case): A 0.23, B 0.00, B-A = -0.225 [-0.325,-0.125]
+  explicit  (T1-email-verification, T6-clean-slugs, T8-unpublish): A 0.28, B 0.00, B-A = -0.283 [-0.383,-0.200]
+  Prediction: a clearly negative B-A on ambiguous tasks, an interval containing 0 on explicit tasks.
+
+F1: share of task x config cells where every run has the same severity = 0.65 -> not triggered (threshold 0.80)
+  A: pass^5 0.463 [0.418,0.567] vs single-p prediction 0.222 -> outside
+  B: pass^5 1.000 [1.000,1.000] vs single-p prediction 1.000 -> inside
+  C: pass^5 0.466 [0.370,0.632] vs single-p prediction 0.371 -> inside
+  D: pass^5 1.000 [1.000,1.000] vs single-p prediction 1.000 -> inside
+F2: same ranking by pass, pass^5 and severe = True; all predictions inside = False -> not triggered
+
+Per task (pass rate / severe rate / severity counts 0..4):
+  T1-email-verification     A 0.3/0.7 [7, 0, 0, 0, 13]  B 1.0/0.0 [20, 0, 0, 0, 0]  C 0.6/0.4 [12, 0, 0, 0, 8]  D 1.0/0.0 [20, 0, 0, 0, 0]
+  T4-scheduled-posts        A 0.6/0.5 [11, 0, 0, 9, 0]  B 1.0/0.0 [20, 0, 0, 0, 0]  C 0.7/0.3 [14, 0, 0, 6, 0]  D 1.0/0.0 [20, 0, 0, 0, 0]
+  T6-clean-slugs            A 1.0/0.0 [20, 0, 0, 0, 0]  B 1.0/0.0 [20, 0, 0, 0, 0]  C 1.0/0.0 [20, 0, 0, 0, 0]  D 1.0/0.0 [20, 0, 0, 0, 0]
+  T7-email-case             A 1.0/0.0 [20, 0, 0, 0, 0]  B 1.0/0.0 [20, 0, 0, 0, 0]  C 0.8/0.0 [17, 0, 3, 0, 0]  D 1.0/0.0 [20, 0, 0, 0, 0]
+  T8-unpublish              A 0.8/0.2 [16, 0, 0, 4, 0]  B 1.0/0.0 [20, 0, 0, 0, 0]  C 0.9/0.1 [19, 0, 0, 1, 0]  D 1.0/0.0 [20, 0, 0, 0, 0]

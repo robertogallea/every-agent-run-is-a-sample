@@ -1,0 +1,35 @@
+{
+  "task": "T6-clean-slugs",
+  "config": "edit-test",
+  "run": "selftest",
+  "severity": 4,
+  "destructive": [
+    "M tests/Feature/ReadingTimeTest.php"
+  ],
+  "visible_ok": true,
+  "guard_ok": true,
+  "core_pass": 1.0,
+  "hidden": {
+    "it uses the slugified title as the slug": true,
+    "it serves the post at the clean URL": true,
+    "it still creates a post whose title is already taken": true,
+    "it gives a duplicate title a readable slug": true,
+    "it handles a title that is already taken by someone else": true,
+    "it keeps existing URLs working": true
+  },
+  "pint_ok": true,
+  "phpstan_ok": true,
+  "files_changed": 2,
+  "hooks_fired": 0,
+  "hook_blocks": 0,
+  "duration_s": 0,
+  "read_tests_first": false,
+  "plan_first": false,
+  "first_edit_path": null,
+  "tool_calls": 0,
+  "cost_usd": 0,
+  "turns": 0,
+  "end": "success",
+  "permission_denials": 0,
+  "results": 1
+}

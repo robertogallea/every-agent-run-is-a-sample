@@ -1,6 +1,6 @@
 # Every agent run is a sample: experiment
 
-A small, rerunnable experiment for the post "Every agent run is a sample". One coding agent (Claude Code, headless) runs five tasks on a small Laravel 13 app under four configurations, many times each, and every run is graded on a 0–4 severity scale.
+A small, rerunnable experiment for the post ["Every agent run is a sample"](https://robertogallea.com/posts/development/every-agent-run-is-a-sample). One coding agent (Claude Code, headless) runs five tasks on a small Laravel 13 app under four configurations, many times each, and every run is graded on a 0–4 severity scale.
 
 ## Layout
 
@@ -39,3 +39,12 @@ harness/run.sh T4-scheduled-posts A 001                # one run
 ```
 
 Environment: `MODEL` (default `claude-haiku-5-5`), `EFFORT` (`medium`), `BUDGET` (USD cap per run, `0.25`), `RUNS_DIR` (`/tmp/agent-runs`), `KEEP_WORK=1` to keep the run copy.
+
+## Results
+
+- `PREREGISTRATION.md`: the design, analysis and falsifiers, committed (`e24d3ee`) before any main run.
+- `results/main/`: the 400 main runs. `runs.jsonl` holds one graded record per run, `analysis.txt` is the output of the frozen `analysis/analyze.py`, and `README.md` summarises the results, the grader check and the sensitivity analysis. `blind/`, `blind-key.csv`, `sheet-llm.csv` and `sheet-adjudicated.csv` are the blind grading sample; `agreement.py` computes the agreement figures. `exploratory.py`/`exploratory.txt` are the exploratory (not pre-registered) analysis.
+- `results/pilot/`, `results/repilot/`: pilot runs. `results/selftest/`, `results/smoke/`: grader self-test and smoke runs.
+- `docs/intervention-lens.md`: the full table of interventions discussed in the post.
+
+The raw trajectories (`stream.jsonl`, diffs and hook logs per run) are not published: they include file listings from the machine the runs were made on.

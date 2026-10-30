@@ -1,0 +1,193 @@
+diff --git a/app/Http/Controllers/Auth/LoginController.php b/app/Http/Controllers/Auth/LoginController.php
+index 85383e7..1cb7c0d 100644
+--- a/app/Http/Controllers/Auth/LoginController.php
++++ b/app/Http/Controllers/Auth/LoginController.php
+@@ -3,6 +3,7 @@
+ namespace App\Http\Controllers\Auth;
+ 
+ use App\Http\Controllers\Controller;
++use App\Models\User;
+ use Illuminate\Http\RedirectResponse;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
+@@ -23,7 +24,10 @@ public function store(Request $request): RedirectResponse
+             'password' => ['required', 'string'],
+         ]);
+ 
+-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
++        // Use the address as stored, so emails registered in a different letter case still match.
++        $storedEmail = User::query()->whereEmailIs($credentials['email'])->value('email');
++
++        if (! Auth::attempt(['email' => $storedEmail ?? $credentials['email'], 'password' => $credentials['password']], $request->boolean('remember'))) {
+             throw ValidationException::withMessages([
+                 'email' => __('auth.failed'),
+             ]);
+diff --git a/app/Http/Controllers/Auth/RegisterController.php b/app/Http/Controllers/Auth/RegisterController.php
+index d5d026f..5500386 100644
+--- a/app/Http/Controllers/Auth/RegisterController.php
++++ b/app/Http/Controllers/Auth/RegisterController.php
+@@ -4,10 +4,12 @@
+ 
+ use App\Http\Controllers\Controller;
+ use App\Models\User;
++use Closure;
+ use Illuminate\Http\RedirectResponse;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
+ use Illuminate\Support\Facades\Hash;
++use Illuminate\Support\Str;
+ use Illuminate\View\View;
+ 
+ class RegisterController extends Controller
+@@ -21,13 +23,23 @@ public function store(Request $request): RedirectResponse
+     {
+         $data = $request->validate([
+             'name' => ['required', 'string', 'max:255'],
+-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
++            'email' => [
++                'required',
++                'email',
++                'max:255',
++                // Laravel's `unique` rule is case-sensitive, so check for a duplicate ignoring case.
++                function (string $attribute, mixed $value, Closure $fail): void {
++                    if (User::query()->whereEmailIs((string) $value)->exists()) {
++                        $fail(__('validation.unique', ['attribute' => $attribute]));
++                    }
++                },
++            ],
+             'password' => ['required', 'string', 'min:8', 'confirmed'],
+         ]);
+ 
+         $user = User::create([
+             'name' => $data['name'],
+-            'email' => $data['email'],
++            'email' => Str::lower($data['email']),
+             'password' => Hash::make($data['password']),
+         ]);
+ 
+diff --git a/app/Models/User.php b/app/Models/User.php
+index 2b326c2..3f5dde0 100644
+--- a/app/Models/User.php
++++ b/app/Models/User.php
+@@ -6,10 +6,13 @@
+ use Database\Factories\UserFactory;
+ use Illuminate\Database\Eloquent\Attributes\Fillable;
+ use Illuminate\Database\Eloquent\Attributes\Hidden;
++use Illuminate\Database\Eloquent\Attributes\Scope;
++use Illuminate\Database\Eloquent\Builder;
+ use Illuminate\Database\Eloquent\Factories\HasFactory;
+ use Illuminate\Database\Eloquent\Relations\HasMany;
+ use Illuminate\Foundation\Auth\User as Authenticatable;
+ use Illuminate\Notifications\Notifiable;
++use Illuminate\Support\Str;
+ 
+ #[Fillable(['name', 'email', 'password'])]
+ #[Hidden(['password', 'remember_token'])]
+@@ -36,4 +39,15 @@ public function posts(): HasMany
+     {
+         return $this->hasMany(Post::class);
+     }
++
++    /**
++     * Match an email address regardless of letter case.
++     *
++     * @param  Builder<static>  $query
++     */
++    #[Scope]
++    protected function whereEmailIs(Builder $query, string $email): void
++    {
++        $query->whereRaw('LOWER(email) = ?', [Str::lower($email)]);
++    }
+ }
+diff --git a/tests/Feature/EmailCaseTest.php b/tests/Feature/EmailCaseTest.php
+new file mode 100644
+index 0000000..1361dae
+--- /dev/null
++++ b/tests/Feature/EmailCaseTest.php
+@@ -0,0 +1,86 @@
++<?php
++
++use App\Models\User;
++use Illuminate\Support\Facades\DB;
++
++it('logs in with an email address that differs only in letter case', function () {
++    User::factory()->create([
++        'email' => 'ada@example.com',
++        'password' => 'secret-password',
++    ]);
++
++    $this->post('/login', ['email' => 'Ada@Example.COM', 'password' => 'secret-password'])
++        ->assertRedirect(route('posts.index'))
++        ->assertSessionHasNoErrors();
++
++    $this->assertAuthenticatedAs(User::where('email', 'ada@example.com')->first());
++});
++
++it('logs in a user who registered with a mixed-case email address', function () {
++    // Simulates a row created before email addresses were normalised.
++    $user = User::factory()->create(['password' => 'secret-password']);
++    DB::table('users')->where('id', $user->id)->update(['email' => 'Ada@Example.com']);
++
++    $this->post('/login', ['email' => 'ada@example.com', 'password' => 'secret-password'])
++        ->assertRedirect(route('posts.index'))
++        ->assertSessionHasNoErrors();
++
++    $this->assertAuthenticatedAs($user);
++
++    $this->post('/logout');
++    $this->post('/login', ['email' => 'ADA@EXAMPLE.COM', 'password' => 'secret-password'])
++        ->assertSessionHasNoErrors();
++
++    $this->assertAuthenticatedAs($user);
++});
++
++it('still rejects a wrong password when the email differs only in case', function () {
++    User::factory()->create([
++        'email' => 'ada@example.com',
++        'password' => 'secret-password',
++    ]);
++
++    $this->post('/login', ['email' => 'ADA@example.com', 'password' => 'wrong-password'])
++        ->assertSessionHasErrors('email');
++
++    $this->assertGuest();
++});
++
++it('stores new registrations with a lower-cased email address', function () {
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => 'Ada@Example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ])->assertRedirect(route('posts.index'));
++
++    expect(User::pluck('email')->all())->toBe(['ada@example.com']);
++});
++
++it('refuses to register an email address that differs from an existing one only in case', function () {
++    User::factory()->create(['email' => 'ada@example.com']);
++
++    $this->post('/register', [
++        'name' => 'Ada Two',
++        'email' => 'ADA@Example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ])->assertSessionHasErrors('email');
++
++    expect(User::count())->toBe(1);
++    $this->assertGuest();
++});
++
++it('refuses to register a mixed-case email address that matches a legacy mixed-case row', function () {
++    $existing = User::factory()->create();
++    DB::table('users')->where('id', $existing->id)->update(['email' => 'Ada@Example.com']);
++
++    $this->post('/register', [
++        'name' => 'Ada Two',
++        'email' => 'ada@example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ])->assertSessionHasErrors('email');
++
++    expect(User::count())->toBe(1);
++});

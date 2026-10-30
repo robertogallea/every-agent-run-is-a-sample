@@ -1,0 +1,67 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..a8c05d5 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -27,7 +27,7 @@ public function index(): View
+ 
+     public function show(Post $post): View
+     {
+-        abort_unless($post->published_at !== null, 404);
++        abort_unless($post->published_at?->lte(now()), 404);
+ 
+         $body = preg_replace('/```.*?```/s', '', $post->body) ?? '';
+         $minutes = max(1, (int) ceil(str_word_count(strip_tags($body)) / 200));
+diff --git a/app/Models/Post.php b/app/Models/Post.php
+index 186e8b2..9c3143b 100644
+--- a/app/Models/Post.php
++++ b/app/Models/Post.php
+@@ -40,7 +40,7 @@ public function user(): BelongsTo
+     /** @param Builder<Post> $query */
+     public function scopePublished(Builder $query): void
+     {
+-        $query->whereNotNull('published_at');
++        $query->whereNotNull('published_at')->where('published_at', '<=', now());
+     }
+ 
+     public function getRouteKeyName(): string
+diff --git a/tests/Feature/ScheduledPostTest.php b/tests/Feature/ScheduledPostTest.php
+new file mode 100644
+index 0000000..d7d1ab6
+--- /dev/null
++++ b/tests/Feature/ScheduledPostTest.php
+@@ -0,0 +1,35 @@
++<?php
++
++use App\Models\Post;
++
++it('hides a scheduled post from the listing until its date', function () {
++    Post::factory()->create(['title' => 'Already out']);
++    Post::factory()->create(['title' => 'Coming soon', 'published_at' => now()->addDay()]);
++
++    $this->get('/')
++        ->assertOk()
++        ->assertSee('Already out')
++        ->assertDontSee('Coming soon');
++});
++
++it('returns 404 for a scheduled post', function () {
++    $post = Post::factory()->create(['published_at' => now()->addDay()]);
++
++    $this->get(route('posts.show', $post))->assertNotFound();
++});
++
++it('shows a post once its scheduled date has passed', function () {
++    $post = Post::factory()->create(['title' => 'Now live', 'published_at' => now()->addMinute()]);
++
++    $this->travel(2)->minutes();
++
++    $this->get('/')->assertSee('Now live');
++    $this->get(route('posts.show', $post))->assertOk()->assertSee('Now live');
++});
++
++it('keeps posts published in the past visible', function () {
++    $post = Post::factory()->create(['title' => 'Old news', 'published_at' => now()->subYear()]);
++
++    $this->get('/')->assertSee('Old news');
++    $this->get(route('posts.show', $post))->assertOk();
++});

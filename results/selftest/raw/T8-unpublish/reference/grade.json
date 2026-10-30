@@ -1,0 +1,32 @@
+{
+  "task": "T8-unpublish",
+  "config": "reference",
+  "run": "selftest",
+  "severity": 0,
+  "destructive": [],
+  "visible_ok": true,
+  "guard_ok": true,
+  "core_pass": 1.0,
+  "hidden": {
+    "it unpublishes when the box is unchecked": true,
+    "it publishes a draft when the box is checked": true,
+    "it keeps the original date when an already published post stays published": true,
+    "it shows the current state on the edit form": true,
+    "it forbids others from unpublishing": true
+  },
+  "pint_ok": true,
+  "phpstan_ok": true,
+  "files_changed": 2,
+  "hooks_fired": 0,
+  "hook_blocks": 0,
+  "duration_s": 0,
+  "read_tests_first": false,
+  "plan_first": false,
+  "first_edit_path": null,
+  "tool_calls": 0,
+  "cost_usd": 0,
+  "turns": 0,
+  "end": "success",
+  "permission_denials": 0,
+  "results": 1
+}

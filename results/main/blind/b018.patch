@@ -1,0 +1,79 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..ad79fc1 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -27,7 +27,7 @@ public function index(): View
+ 
+     public function show(Post $post): View
+     {
+-        abort_unless($post->published_at !== null, 404);
++        abort_if($post->published_at?->isFuture() ?? true, 404);
+ 
+         $body = preg_replace('/```.*?```/s', '', $post->body) ?? '';
+         $minutes = max(1, (int) ceil(str_word_count(strip_tags($body)) / 200));
+diff --git a/app/Models/Post.php b/app/Models/Post.php
+index 186e8b2..9c3143b 100644
+--- a/app/Models/Post.php
++++ b/app/Models/Post.php
+@@ -40,7 +40,7 @@ public function user(): BelongsTo
+     /** @param Builder<Post> $query */
+     public function scopePublished(Builder $query): void
+     {
+-        $query->whereNotNull('published_at');
++        $query->whereNotNull('published_at')->where('published_at', '<=', now());
+     }
+ 
+     public function getRouteKeyName(): string
+diff --git a/database/factories/PostFactory.php b/database/factories/PostFactory.php
+index 2893b93..d24cb27 100644
+--- a/database/factories/PostFactory.php
++++ b/database/factories/PostFactory.php
+@@ -29,4 +29,9 @@ public function draft(): static
+     {
+         return $this->state(fn () => ['published_at' => null]);
+     }
++
++    public function scheduled(): static
++    {
++        return $this->state(fn () => ['published_at' => now()->addDay()]);
++    }
+ }
+diff --git a/tests/Feature/ScheduledPostTest.php b/tests/Feature/ScheduledPostTest.php
+new file mode 100644
+index 0000000..e98261d
+--- /dev/null
++++ b/tests/Feature/ScheduledPostTest.php
+@@ -0,0 +1,33 @@
++<?php
++
++use App\Models\Post;
++
++it('hides a scheduled post from the index until its date', function () {
++    Post::factory()->scheduled()->create(['title' => 'Launch announcement']);
++
++    $this->get('/')
++        ->assertOk()
++        ->assertDontSee('Launch announcement');
++});
++
++it('shows a scheduled post on the index once its date has passed', function () {
++    Post::factory()->scheduled()->create(['title' => 'Launch announcement']);
++
++    $this->travelTo(now()->addDays(2));
++
++    $this->get('/')->assertOk()->assertSee('Launch announcement');
++});
++
++it('returns 404 for a scheduled post before its date', function () {
++    $post = Post::factory()->scheduled()->create();
++
++    $this->get(route('posts.show', $post))->assertNotFound();
++});
++
++it('shows a scheduled post once its date has passed', function () {
++    $post = Post::factory()->scheduled()->create(['title' => 'Launch announcement']);
++
++    $this->travelTo(now()->addDays(2));
++
++    $this->get(route('posts.show', $post))->assertOk()->assertSee('Launch announcement');
++});

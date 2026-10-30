@@ -1,0 +1,161 @@
+diff --git a/app/Http/Controllers/Auth/LoginController.php b/app/Http/Controllers/Auth/LoginController.php
+index 85383e7..0edf30e 100644
+--- a/app/Http/Controllers/Auth/LoginController.php
++++ b/app/Http/Controllers/Auth/LoginController.php
+@@ -6,6 +6,7 @@
+ use Illuminate\Http\RedirectResponse;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
++use Illuminate\Support\Str;
+ use Illuminate\Validation\ValidationException;
+ use Illuminate\View\View;
+ 
+@@ -18,6 +19,10 @@ public function create(): View
+ 
+     public function store(Request $request): RedirectResponse
+     {
++        if (is_string($request->input('email'))) {
++            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
++        }
++
+         $credentials = $request->validate([
+             'email' => ['required', 'email'],
+             'password' => ['required', 'string'],
+diff --git a/app/Http/Controllers/Auth/RegisterController.php b/app/Http/Controllers/Auth/RegisterController.php
+index d5d026f..3efcccf 100644
+--- a/app/Http/Controllers/Auth/RegisterController.php
++++ b/app/Http/Controllers/Auth/RegisterController.php
+@@ -8,6 +8,7 @@
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
+ use Illuminate\Support\Facades\Hash;
++use Illuminate\Support\Str;
+ use Illuminate\View\View;
+ 
+ class RegisterController extends Controller
+@@ -19,6 +20,10 @@ public function create(): View
+ 
+     public function store(Request $request): RedirectResponse
+     {
++        if (is_string($request->input('email'))) {
++            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
++        }
++
+         $data = $request->validate([
+             'name' => ['required', 'string', 'max:255'],
+             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+diff --git a/database/migrations/2026_10_30_000000_lowercase_user_emails.php b/database/migrations/2026_10_30_000000_lowercase_user_emails.php
+new file mode 100644
+index 0000000..92490f0
+--- /dev/null
++++ b/database/migrations/2026_10_30_000000_lowercase_user_emails.php
+@@ -0,0 +1,41 @@
++<?php
++
++use Illuminate\Database\Migrations\Migration;
++use Illuminate\Support\Facades\DB;
++use Illuminate\Support\Facades\Log;
++
++return new class extends Migration
++{
++    /**
++     * Lowercase existing emails so they match the normalised login input.
++     * Rows whose lowercase form is already taken are left unchanged and logged.
++     */
++    public function up(): void
++    {
++        DB::table('users')->orderBy('id')->get(['id', 'email'])->each(function ($user) {
++            $lower = strtolower($user->email);
++
++            if ($lower === $user->email) {
++                return;
++            }
++
++            $taken = DB::table('users')->where('email', $lower)->where('id', '!=', $user->id)->exists();
++
++            if ($taken) {
++                Log::warning("Email for user {$user->id} not lowercased: {$lower} already exists.");
++
++                return;
++            }
++
++            DB::table('users')->where('id', $user->id)->update(['email' => $lower]);
++        });
++    }
++
++    /**
++     * Lowercasing is not reversible, so there is nothing to undo.
++     */
++    public function down(): void
++    {
++        //
++    }
++};
+diff --git a/tests/Feature/EmailCaseTest.php b/tests/Feature/EmailCaseTest.php
+new file mode 100644
+index 0000000..67e3c4d
+--- /dev/null
++++ b/tests/Feature/EmailCaseTest.php
+@@ -0,0 +1,62 @@
++<?php
++
++use App\Models\User;
++use Illuminate\Support\Facades\DB;
++use Illuminate\Support\Facades\Hash;
++
++it('logs in when the email case differs from registration', function () {
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => 'Ada@Example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ])->assertRedirect(route('posts.index'));
++
++    auth()->logout();
++
++    $this->post('/login', ['email' => 'ada@example.com', 'password' => 'secret-password'])
++        ->assertRedirect(route('posts.index'));
++
++    $this->assertAuthenticated();
++});
++
++it('stores emails in lowercase on registration', function () {
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => ' Ada@Example.COM ',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ])->assertRedirect(route('posts.index'));
++
++    expect(User::where('email', 'ada@example.com')->exists())->toBeTrue();
++});
++
++it('rejects a registration whose email differs only by case from an existing account', function () {
++    User::factory()->create(['email' => 'ada@example.com']);
++
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => 'ADA@example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ])->assertSessionHasErrors('email');
++
++    expect(User::count())->toBe(1);
++});
++
++it('lowercases existing mixed-case emails in the migration', function () {
++    DB::table('users')->insert([
++        'name' => 'Legacy',
++        'email' => 'Legacy@Example.com',
++        'password' => Hash::make('secret-password'),
++        'created_at' => now(),
++        'updated_at' => now(),
++    ]);
++
++    (require database_path('migrations/2026_10_30_000000_lowercase_user_emails.php'))->up();
++
++    $this->post('/login', ['email' => 'legacy@example.com', 'password' => 'secret-password'])
++        ->assertRedirect(route('posts.index'));
++
++    $this->assertAuthenticated();
++});

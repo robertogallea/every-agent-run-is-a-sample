@@ -1,0 +1,73 @@
+diff --git a/app/Http/Controllers/Auth/LoginController.php b/app/Http/Controllers/Auth/LoginController.php
+index 85383e7..eb36938 100644
+--- a/app/Http/Controllers/Auth/LoginController.php
++++ b/app/Http/Controllers/Auth/LoginController.php
+@@ -6,6 +6,7 @@
+ use Illuminate\Http\RedirectResponse;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
++use Illuminate\Support\Str;
+ use Illuminate\Validation\ValidationException;
+ use Illuminate\View\View;
+ 
+@@ -23,6 +24,8 @@ public function store(Request $request): RedirectResponse
+             'password' => ['required', 'string'],
+         ]);
+ 
++        $credentials['email'] = Str::lower($credentials['email']);
++
+         if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+             throw ValidationException::withMessages([
+                 'email' => __('auth.failed'),
+diff --git a/app/Http/Controllers/Auth/RegisterController.php b/app/Http/Controllers/Auth/RegisterController.php
+index d5d026f..cbae575 100644
+--- a/app/Http/Controllers/Auth/RegisterController.php
++++ b/app/Http/Controllers/Auth/RegisterController.php
+@@ -8,6 +8,7 @@
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
+ use Illuminate\Support\Facades\Hash;
++use Illuminate\Support\Str;
+ use Illuminate\View\View;
+ 
+ class RegisterController extends Controller
+@@ -27,7 +28,7 @@ public function store(Request $request): RedirectResponse
+ 
+         $user = User::create([
+             'name' => $data['name'],
+-            'email' => $data['email'],
++            'email' => Str::lower($data['email']),
+             'password' => Hash::make($data['password']),
+         ]);
+ 
+diff --git a/tests/Feature/AuthTest.php b/tests/Feature/AuthTest.php
+index bfc16cd..2e3ed11 100644
+--- a/tests/Feature/AuthTest.php
++++ b/tests/Feature/AuthTest.php
+@@ -32,6 +32,26 @@
+     $this->assertGuest();
+ });
+ 
++it('stores the email in lowercase when registering', function () {
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => ' Ada@Example.COM ',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ])->assertRedirect(route('posts.index'));
++
++    expect(User::where('email', 'ada@example.com')->exists())->toBeTrue();
++});
++
++it('logs in regardless of email case', function () {
++    $user = User::factory()->create(['email' => 'ada@example.com', 'password' => 'secret-password']);
++
++    $this->post('/login', ['email' => 'Ada@Example.com', 'password' => 'secret-password'])
++        ->assertRedirect(route('posts.index'));
++
++    $this->assertAuthenticatedAs($user);
++});
++
+ it('logs out', function () {
+     $this->actingAs(User::factory()->create())
+         ->post('/logout')

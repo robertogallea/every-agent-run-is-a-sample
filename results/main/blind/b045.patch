@@ -1,0 +1,76 @@
+diff --git a/app/Http/Controllers/Auth/LoginController.php b/app/Http/Controllers/Auth/LoginController.php
+index 85383e7..9f3fe09 100644
+--- a/app/Http/Controllers/Auth/LoginController.php
++++ b/app/Http/Controllers/Auth/LoginController.php
+@@ -3,9 +3,11 @@
+ namespace App\Http\Controllers\Auth;
+ 
+ use App\Http\Controllers\Controller;
++use App\Models\User;
+ use Illuminate\Http\RedirectResponse;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
++use Illuminate\Support\Str;
+ use Illuminate\Validation\ValidationException;
+ use Illuminate\View\View;
+ 
+@@ -23,6 +25,10 @@ public function store(Request $request): RedirectResponse
+             'password' => ['required', 'string'],
+         ]);
+ 
++        // Emails are case-insensitive: match the stored address however it was typed, including accounts saved before lowercasing.
++        $credentials['email'] = User::whereRaw('lower(email) = ?', [Str::lower($credentials['email'])])->value('email')
++            ?? $credentials['email'];
++
+         if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+             throw ValidationException::withMessages([
+                 'email' => __('auth.failed'),
+diff --git a/app/Http/Controllers/Auth/RegisterController.php b/app/Http/Controllers/Auth/RegisterController.php
+index d5d026f..86cf7b6 100644
+--- a/app/Http/Controllers/Auth/RegisterController.php
++++ b/app/Http/Controllers/Auth/RegisterController.php
+@@ -19,6 +19,9 @@ public function create(): View
+ 
+     public function store(Request $request): RedirectResponse
+     {
++        // Store emails in lowercase so a capitalized first letter (common on mobile keyboards) can't lock the user out.
++        $request->merge(['email' => $request->string('email')->lower()->toString()]);
++
+         $data = $request->validate([
+             'name' => ['required', 'string', 'max:255'],
+             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+diff --git a/tests/Feature/AuthTest.php b/tests/Feature/AuthTest.php
+index bfc16cd..fd53ba3 100644
+--- a/tests/Feature/AuthTest.php
++++ b/tests/Feature/AuthTest.php
+@@ -23,6 +23,30 @@
+     $this->assertAuthenticatedAs($user);
+ });
+ 
++it('logs in regardless of the email case used at registration', function () {
++    $this->post('/register', [
++        'name' => 'Mario',
++        'email' => 'Mario@Example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ]);
++    $this->post('/logout');
++
++    $this->post('/login', ['email' => 'mario@example.com', 'password' => 'secret-password'])
++        ->assertSessionHasNoErrors();
++
++    $this->assertAuthenticatedAs(User::where('email', 'mario@example.com')->firstOrFail());
++});
++
++it('logs in to an existing mixed-case account with a different email case', function () {
++    $user = User::factory()->create(['email' => 'Legacy@Example.com', 'password' => 'secret-password']);
++
++    $this->post('/login', ['email' => 'legacy@example.com', 'password' => 'secret-password'])
++        ->assertSessionHasNoErrors();
++
++    $this->assertAuthenticatedAs($user);
++});
++
+ it('rejects invalid credentials', function () {
+     $user = User::factory()->create(['password' => 'secret-password']);
+ 

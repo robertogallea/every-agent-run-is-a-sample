@@ -1,0 +1,64 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 9949f03..7e7a03b 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -50,7 +50,7 @@ public function store(Request $request): RedirectResponse
+ 
+         $post = $request->user()->posts()->create([
+             'title' => $data['title'],
+-            'slug' => Str::slug($data['title']).'-'.Str::lower(Str::random(6)),
++            'slug' => $this->uniqueSlug($data['title']),
+             'body' => $data['body'],
+             'published_at' => ($data['publish'] ?? false) ? now() : null,
+         ]);
+@@ -58,6 +58,22 @@ public function store(Request $request): RedirectResponse
+         return redirect()->route('posts.edit', $post);
+     }
+ 
++    /**
++     * Use the bare slugified title, adding a numeric suffix only when it is already taken.
++     */
++    private function uniqueSlug(string $title): string
++    {
++        $base = Str::slug($title) ?: 'post';
++        $slug = $base;
++        $suffix = 2;
++
++        while (Post::where('slug', $slug)->exists()) {
++            $slug = $base.'-'.$suffix++;
++        }
++
++        return $slug;
++    }
++
+     public function edit(Post $post): View
+     {
+         Gate::authorize('update', $post);
+diff --git a/tests/Feature/PostTest.php b/tests/Feature/PostTest.php
+index 30cb0ff..fdc0141 100644
+--- a/tests/Feature/PostTest.php
++++ b/tests/Feature/PostTest.php
+@@ -34,6 +34,23 @@
+     expect($user->posts()->where('title', 'Mine')->exists())->toBeTrue();
+ });
+ 
++it('uses the bare slugified title as the post slug', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'My First Post', 'body' => 'Text', 'publish' => true]);
++
++    expect($user->posts()->where('title', 'My First Post')->firstOrFail()->slug)->toBe('my-first-post');
++});
++
++it('adds a numeric suffix only when the slug is already taken', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'Same Title', 'body' => 'Text']);
++    $this->actingAs($user)->post('/posts', ['title' => 'Same Title', 'body' => 'Text']);
++
++    expect($user->posts()->pluck('slug')->sort()->values()->all())->toBe(['same-title', 'same-title-2']);
++});
++
+ it('requires login to create a post', function () {
+     $this->get('/posts/create')->assertRedirect(route('login'));
+ });

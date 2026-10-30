@@ -1,0 +1,296 @@
+diff --git a/app/Http/Controllers/Auth/EmailVerificationController.php b/app/Http/Controllers/Auth/EmailVerificationController.php
+new file mode 100644
+index 0000000..68a6718
+--- /dev/null
++++ b/app/Http/Controllers/Auth/EmailVerificationController.php
+@@ -0,0 +1,37 @@
++<?php
++
++namespace App\Http\Controllers\Auth;
++
++use App\Http\Controllers\Controller;
++use Illuminate\Foundation\Auth\EmailVerificationRequest;
++use Illuminate\Http\RedirectResponse;
++use Illuminate\Http\Request;
++use Illuminate\View\View;
++
++class EmailVerificationController extends Controller
++{
++    public function notice(Request $request): View|RedirectResponse
++    {
++        return $request->user()->hasVerifiedEmail()
++            ? redirect()->route('posts.index')
++            : view('auth.verify-email');
++    }
++
++    public function verify(EmailVerificationRequest $request): RedirectResponse
++    {
++        $request->fulfill();
++
++        return redirect()->route('posts.create')->with('status', 'Your email has been verified.');
++    }
++
++    public function resend(Request $request): RedirectResponse
++    {
++        if ($request->user()->hasVerifiedEmail()) {
++            return redirect()->route('posts.index');
++        }
++
++        $request->user()->sendEmailVerificationNotification();
++
++        return back()->with('status', 'A new verification link has been sent.');
++    }
++}
+diff --git a/app/Http/Controllers/Auth/RegisterController.php b/app/Http/Controllers/Auth/RegisterController.php
+index d5d026f..eb3bd8a 100644
+--- a/app/Http/Controllers/Auth/RegisterController.php
++++ b/app/Http/Controllers/Auth/RegisterController.php
+@@ -4,6 +4,7 @@
+ 
+ use App\Http\Controllers\Controller;
+ use App\Models\User;
++use Illuminate\Auth\Events\Registered;
+ use Illuminate\Http\RedirectResponse;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Auth;
+@@ -31,6 +32,9 @@ public function store(Request $request): RedirectResponse
+             'password' => Hash::make($data['password']),
+         ]);
+ 
++        // Fires the event that sends the verification email (User implements MustVerifyEmail).
++        event(new Registered($user));
++
+         Auth::login($user);
+ 
+         return redirect()->route('posts.index');
+diff --git a/app/Models/User.php b/app/Models/User.php
+index 2b326c2..8ab84e1 100644
+--- a/app/Models/User.php
++++ b/app/Models/User.php
+@@ -2,8 +2,8 @@
+ 
+ namespace App\Models;
+ 
+-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+ use Database\Factories\UserFactory;
++use Illuminate\Contracts\Auth\MustVerifyEmail;
+ use Illuminate\Database\Eloquent\Attributes\Fillable;
+ use Illuminate\Database\Eloquent\Attributes\Hidden;
+ use Illuminate\Database\Eloquent\Factories\HasFactory;
+@@ -13,7 +13,7 @@
+ 
+ #[Fillable(['name', 'email', 'password'])]
+ #[Hidden(['password', 'remember_token'])]
+-class User extends Authenticatable
++class User extends Authenticatable implements MustVerifyEmail
+ {
+     /** @use HasFactory<UserFactory> */
+     use HasFactory, Notifiable;
+diff --git a/database/migrations/2026_10_30_000000_mark_existing_users_as_verified.php b/database/migrations/2026_10_30_000000_mark_existing_users_as_verified.php
+new file mode 100644
+index 0000000..ad55f9e
+--- /dev/null
++++ b/database/migrations/2026_10_30_000000_mark_existing_users_as_verified.php
+@@ -0,0 +1,20 @@
++<?php
++
++use Illuminate\Database\Migrations\Migration;
++use Illuminate\Support\Facades\DB;
++
++// Existing accounts predate the verification requirement, so they are grandfathered in.
++return new class extends Migration
++{
++    public function up(): void
++    {
++        DB::table('users')
++            ->whereNull('email_verified_at')
++            ->update(['email_verified_at' => DB::raw('created_at')]);
++    }
++
++    public function down(): void
++    {
++        // Not reversible: we cannot tell which users were verified before this migration ran.
++    }
++};
+diff --git a/resources/views/auth/verify-email.blade.php b/resources/views/auth/verify-email.blade.php
+new file mode 100644
+index 0000000..b5c826c
+--- /dev/null
++++ b/resources/views/auth/verify-email.blade.php
+@@ -0,0 +1,17 @@
++@extends('layouts.app')
++
++@section('content')
++<h1>Verify your email address</h1>
++<p>Before you can write posts, please click the link we sent to your email address.</p>
++@if (session('status'))
++    <p>{{ session('status') }}</p>
++@endif
++<form method="POST" action="{{ route('verification.send') }}">
++    @csrf
++    <button>Resend verification email</button>
++</form>
++<form method="POST" action="{{ route('logout') }}">
++    @csrf
++    <button>Log out</button>
++</form>
++@endsection
+diff --git a/routes/web.php b/routes/web.php
+index 44a0484..06db9e8 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -1,5 +1,6 @@
+ <?php
+ 
++use App\Http\Controllers\Auth\EmailVerificationController;
+ use App\Http\Controllers\Auth\LoginController;
+ use App\Http\Controllers\Auth\RegisterController;
+ use App\Http\Controllers\PostController;
+@@ -16,8 +17,20 @@
+ 
+ Route::middleware('auth')->group(function () {
+     Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
+-    Route::get('/posts/create', [PostController::class, 'create'])->name('posts.create');
+-    Route::post('/posts', [PostController::class, 'store'])->name('posts.store');
++
++    Route::get('/email/verify', [EmailVerificationController::class, 'notice'])->name('verification.notice');
++    Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
++        ->middleware(['signed', 'throttle:6,1'])
++        ->name('verification.verify');
++    Route::post('/email/verification-notification', [EmailVerificationController::class, 'resend'])
++        ->middleware('throttle:6,1')
++        ->name('verification.send');
++
++    Route::middleware('verified')->group(function () {
++        Route::get('/posts/create', [PostController::class, 'create'])->name('posts.create');
++        Route::post('/posts', [PostController::class, 'store'])->name('posts.store');
++    });
++
+     Route::get('/posts/{post}/edit', [PostController::class, 'edit'])->name('posts.edit');
+     Route::put('/posts/{post}', [PostController::class, 'update'])->name('posts.update');
+ });
+diff --git a/tests/Feature/EmailVerificationTest.php b/tests/Feature/EmailVerificationTest.php
+new file mode 100644
+index 0000000..ce72160
+--- /dev/null
++++ b/tests/Feature/EmailVerificationTest.php
+@@ -0,0 +1,119 @@
++<?php
++
++use App\Models\User;
++use Illuminate\Auth\Events\Registered;
++use Illuminate\Auth\Notifications\VerifyEmail;
++use Illuminate\Support\Facades\Event;
++use Illuminate\Support\Facades\Notification;
++use Illuminate\Support\Facades\URL;
++
++it('sends a verification email when a user registers', function () {
++    Notification::fake();
++
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => 'ada@example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ]);
++
++    $user = User::where('email', 'ada@example.com')->firstOrFail();
++    expect($user->hasVerifiedEmail())->toBeFalse();
++    Notification::assertSentTo($user, VerifyEmail::class);
++});
++
++it('fires the Registered event on registration', function () {
++    Event::fake([Registered::class]);
++
++    $this->post('/register', [
++        'name' => 'Ada',
++        'email' => 'ada@example.com',
++        'password' => 'secret-password',
++        'password_confirmation' => 'secret-password',
++    ]);
++
++    Event::assertDispatched(Registered::class);
++});
++
++it('lets unverified users browse and log in', function () {
++    $user = User::factory()->unverified()->create(['password' => 'secret-password']);
++
++    $this->post('/login', ['email' => $user->email, 'password' => 'secret-password'])
++        ->assertRedirect(route('posts.index'));
++
++    $this->get('/')->assertOk();
++    $this->assertAuthenticatedAs($user);
++});
++
++it('blocks unverified users from creating posts', function () {
++    $user = User::factory()->unverified()->create();
++
++    $this->actingAs($user)->get('/posts/create')
++        ->assertRedirect(route('verification.notice'));
++
++    $this->actingAs($user)->post('/posts', ['title' => 'Hi', 'body' => 'There', 'publish' => 1])
++        ->assertRedirect(route('verification.notice'));
++
++    expect($user->posts()->count())->toBe(0);
++});
++
++it('allows verified users to create posts', function () {
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->get('/posts/create')->assertOk();
++
++    $this->actingAs($user)->post('/posts', ['title' => 'Hi', 'body' => 'There'])
++        ->assertRedirect();
++
++    expect($user->posts()->count())->toBe(1);
++});
++
++it('verifies the user through a signed link', function () {
++    $user = User::factory()->unverified()->create();
++
++    $url = URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), [
++        'id' => $user->getKey(),
++        'hash' => sha1($user->getEmailForVerification()),
++    ]);
++
++    $this->actingAs($user)->get($url)->assertRedirect(route('posts.create'));
++
++    expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
++    $this->actingAs($user->fresh())->get('/posts/create')->assertOk();
++});
++
++it('rejects a verification link with an invalid signature', function () {
++    $user = User::factory()->unverified()->create();
++
++    $this->actingAs($user)
++        ->get(route('verification.verify', ['id' => $user->getKey(), 'hash' => sha1($user->getEmailForVerification())]))
++        ->assertForbidden();
++
++    expect($user->fresh()->hasVerifiedEmail())->toBeFalse();
++});
++
++it('resends the verification email', function () {
++    Notification::fake();
++    $user = User::factory()->unverified()->create();
++
++    $this->actingAs($user)->post('/email/verification-notification')
++        ->assertRedirect();
++
++    Notification::assertSentTo($user, VerifyEmail::class);
++});
++
++it('does not resend to an already verified user', function () {
++    Notification::fake();
++    $user = User::factory()->create();
++
++    $this->actingAs($user)->post('/email/verification-notification')
++        ->assertRedirect(route('posts.index'));
++
++    Notification::assertNothingSent();
++});
++
++it('shows the verification notice to unverified users', function () {
++    $user = User::factory()->unverified()->create();
++
++    $this->actingAs($user)->get('/email/verify')->assertOk()->assertSee('Verify your email address');
++});
