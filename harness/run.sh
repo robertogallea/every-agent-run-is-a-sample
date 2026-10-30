@@ -42,7 +42,11 @@ args+=(--disallowedTools "${deny[@]}")
 echo "$settings" > "$OUT/settings.json"
 args+=(--settings "$OUT/settings.json")
 
-printf '%s\n' "$(claude --version)" > "$OUT/claude-version.txt"
+version=$(claude --version)
+printf '%s\n' "$version" > "$OUT/claude-version.txt"
+if [[ -n ${EXPECT_CLAUDE_VERSION:-} && $version != "$EXPECT_CLAUDE_VERSION"* ]]; then
+  echo "Claude Code is $version, expected $EXPECT_CLAUDE_VERSION: refusing to run" >&2; rm -rf "$OUT" "$WORK"; exit 255
+fi
 start=$(date +%s)
 (cd "$WORK" && CLAUDE_CONFIG_DIR=$CFG_DIR CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 DISABLE_AUTOUPDATER=1 \
   HOOK_LOG=$OUT/hooks.log timeout 1800 claude "${args[@]}" > "$OUT/stream.jsonl" 2> "$OUT/stderr.log") || echo "claude exited $?" >> "$OUT/stderr.log"

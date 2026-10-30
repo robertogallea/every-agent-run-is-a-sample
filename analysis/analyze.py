@@ -14,6 +14,9 @@ import numpy as np
 from scipy import stats
 
 CONFIGS = ["A", "B", "C", "D"]
+# Task classes for H-amb, fixed before the main runs (ceiling decision).
+AMBIGUOUS = {"T4-scheduled-posts", "T7-email-case"}
+EXPLICIT = {"T1-email-verification", "T6-clean-slugs", "T8-unpublish"}
 BOOT = int(__import__("os").environ.get("BOOT", 10_000))
 rng = np.random.default_rng(20261030)
 
@@ -87,6 +90,20 @@ def main():
 
     lo, hi = boot(cells, tasks, did)
     print(f"\nPrimary 2: interaction (D-C)-(B-A) on pass = {did(cells):+.3f} [{lo:+.3f},{hi:+.3f}]")
+
+    # Secondary (pre-registered, pilot-suggested) H-amb: the spec's effect on severe failures
+    # concentrates in ambiguous tasks. Severe-failure rate A vs B within each task class.
+    print("\nH-amb: severe-failure rate, B - A, within task classes")
+    for label, cls in (("ambiguous", AMBIGUOUS), ("explicit", EXPLICIT)):
+        sub = [t for t in tasks if t in cls]
+        if not sub:
+            print(f"  {label}: no tasks in data")
+            continue
+        diff = lambda cs, sub=sub: metrics(cs, sub, "B", k)["severe"] - metrics(cs, sub, "A", k)["severe"]
+        lo, hi = boot(cells, sub, diff)
+        a_sev, b_sev = metrics(cells, sub, "A", k)["severe"], metrics(cells, sub, "B", k)["severe"]
+        print(f"  {label:<9} ({', '.join(sub)}): A {a_sev:.2f}, B {b_sev:.2f}, B-A = {b_sev - a_sev:+.3f} [{lo:+.3f},{hi:+.3f}]")
+    print("  Prediction: a clearly negative B-A on ambiguous tasks, an interval containing 0 on explicit tasks.")
 
     # Falsifier F1: no meaningful variability.
     uniform = sum(len(set(v)) == 1 for v in cells.values()) / len(cells)
